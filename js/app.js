@@ -1,38 +1,224 @@
-const PRODUCTS_KEY = "iav_products";
-const HISTORY_KEY = "iav_history";
+const APP_API_URL = "http://localhost:3000/api";
 
-const STATES = [
-    "Disponible",
-    "Servicio Técnico",
-    "Dañado",
-    "Empaque Deteriorado",
-    "Exhibición"
-];
-
-const PAGE_META = {
-    inicio: { title: "Inicio", subtitle: "Resumen general del inventario" },
-    registro: { title: "Registrar producto", subtitle: "Complete la información del nuevo producto" },
-    productos: { title: "Productos", subtitle: "Busque y gestione el estado de los productos" },
-    historial: { title: "Historial de cambios", subtitle: "Registro de modificaciones de estado" },
-    reportes: { title: "Reportes", subtitle: "Resumen por estado del inventario" }
-};
-
+let currentUser = null;
 let products = [];
 let history = [];
+let reportByState = [];
+let reportByCategory = [];
+let inventoryMovements = [];
+let academicIndicators = [];
+let improvementIndicators = null;
 let selectedProductId = null;
-let currentUser = null;
 
-document.addEventListener("DOMContentLoaded", () => {
+const pageInfo = {
+    inicio: {
+        title: "Inicio",
+        subtitle: "Resumen general del inventario de productos de alto valor"
+    },
+    registro: {
+        title: "Registrar producto",
+        subtitle: "Ingreso de nuevos productos al inventario"
+    },
+    productos: {
+        title: "Productos",
+        subtitle: "Consulta, búsqueda y actualización de productos"
+    },
+    historial: {
+        title: "Historial",
+        subtitle: "Registro de cambios de estado"
+    },
+    reportes: {
+        title: "Reportes",
+        subtitle: "Indicadores por estado y categoría"
+    }
+};
+
+const estados = [
+    "Disponible",
+    "En exhibición",
+    "En servicio técnico",
+    "Defectuoso",
+    "Dañado",
+    "Empaque deteriorado",
+    "En tránsito",
+    "Vendido",
+    "De baja"
+];
+
+const ROLES_REGISTRO_PRODUCTOS = [
+    "Supervisor de Almacén",
+    "Administrador de Tienda"
+];
+
+function normalizeText(text) {
+    return String(text || "")
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .toLowerCase()
+        .trim();
+}
+
+function canRegisterProducts() {
+    return ROLES_REGISTRO_PRODUCTOS
+        .map(normalizeText)
+        .includes(normalizeText(currentUser?.role));
+}
+
+document.addEventListener("DOMContentLoaded", async () => {
     currentUser = requireAuth();
+
     if (!currentUser) return;
 
     initLayout();
-    initData();
+    applyRolePermissions();
+    initNavigation();
     initForm();
     initFilters();
     initModal();
-    renderAll();
+
+    await loadData();
 });
+
+function getAuthHeaders() {
+    const token = localStorage.getItem("authToken");
+
+    return {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${token}`
+    };
+}
+
+async function handleUnauthorized(response) {
+    if (response.status === 401) {
+        showToast("Sesión expirada. Inicie sesión nuevamente.", "error");
+
+        setTimeout(() => {
+            logout();
+        }, 1200);
+
+        return true;
+    }
+
+    if (response.status === 403) {
+        showToast("No tienes permisos para realizar esta acción.", "error");
+        return true;
+    }
+
+    return false;
+}
+
+async function loadData() {
+    await Promise.all([
+        loadProducts(),
+        loadHistory(),
+        loadReportData()
+    ]);
+
+    renderAll();
+}
+
+async function loadProducts() {
+    try {
+        const response = await fetch(`${APP_API_URL}/productos`, {
+            headers: getAuthHeaders()
+        });
+
+        if (await handleUnauthorized(response)) return;
+
+        products = await response.json();
+
+        if (!Array.isArray(products)) {
+            products = [];
+        }
+
+    } catch (error) {
+        console.error(error);
+        showToast("Error al cargar productos desde MySQL.", "error");
+        products = [];
+    }
+}
+
+async function loadHistory() {
+    try {
+        const response = await fetch(`${APP_API_URL}/historial`, {
+            headers: getAuthHeaders()
+        });
+
+        if (await handleUnauthorized(response)) return;
+
+        history = await response.json();
+
+        if (!Array.isArray(history)) {
+            history = [];
+        }
+
+    } catch (error) {
+        console.error(error);
+        showToast("Error al cargar historial desde MySQL.", "error");
+        history = [];
+    }
+}
+
+async function loadReportData() {
+    try {
+        const [
+            stateResponse,
+            categoryResponse,
+            movementsResponse,
+            indicatorsResponse,
+            improvementResponse
+        ] = await Promise.all([
+            fetch(`${APP_API_URL}/reportes/estado`, { headers: getAuthHeaders() }),
+            fetch(`${APP_API_URL}/reportes/categoria`, { headers: getAuthHeaders() }),
+            fetch(`${APP_API_URL}/reportes/movimientos`, { headers: getAuthHeaders() }),
+            fetch(`${APP_API_URL}/reportes/indicadores`, { headers: getAuthHeaders() }),
+            fetch(`${APP_API_URL}/reportes/mejora`, { headers: getAuthHeaders() })
+        ]);
+
+        if (await handleUnauthorized(stateResponse)) return;
+        if (await handleUnauthorized(categoryResponse)) return;
+        if (await handleUnauthorized(movementsResponse)) return;
+        if (await handleUnauthorized(indicatorsResponse)) return;
+        if (await handleUnauthorized(improvementResponse)) return;
+
+        reportByState = await stateResponse.json();
+        reportByCategory = await categoryResponse.json();
+        inventoryMovements = await movementsResponse.json();
+        academicIndicators = await indicatorsResponse.json();
+        improvementIndicators = await improvementResponse.json();
+
+        if (!Array.isArray(reportByState)) reportByState = [];
+        if (!Array.isArray(reportByCategory)) reportByCategory = [];
+        if (!Array.isArray(inventoryMovements)) inventoryMovements = [];
+        if (!Array.isArray(academicIndicators)) academicIndicators = [];
+
+    } catch (error) {
+        console.error(error);
+        showToast("Error al cargar reportes académicos.", "error");
+
+        reportByState = [];
+        reportByCategory = [];
+        inventoryMovements = [];
+        academicIndicators = [];
+        improvementIndicators = null;
+    }
+}
+
+function applyRolePermissions() {
+    const canCreate = canRegisterProducts();
+    const registerLink = document.querySelector('.nav-link[data-target="registro"]');
+    const registerSection = document.getElementById("registro");
+
+    if (!canCreate) {
+        if (registerLink) {
+            registerLink.remove();
+        }
+
+        if (registerSection) {
+            registerSection.remove();
+        }
+    }
+}
 
 function initLayout() {
     const userName = document.getElementById("userName");
@@ -41,169 +227,160 @@ function initLayout() {
     const mobileMenuBtn = document.getElementById("mobileMenuBtn");
     const sidebar = document.getElementById("sidebar");
     const sidebarOverlay = document.getElementById("sidebarOverlay");
-    const navLinks = document.querySelectorAll(".nav-link");
 
-    userName.textContent = currentUser.name;
-    userAvatar.textContent = currentUser.name.charAt(0).toUpperCase();
+    if (userName) {
+        userName.textContent = `${currentUser.name} · ${currentUser.role}`;
+    }
 
-    logoutBtn.addEventListener("click", logout);
+    if (userAvatar) {
+        userAvatar.textContent = currentUser.name.charAt(0).toUpperCase();
+    }
 
-    mobileMenuBtn.addEventListener("click", () => {
-        sidebar.classList.toggle("open");
-        sidebarOverlay.classList.toggle("show");
-    });
+    if (logoutBtn) {
+        logoutBtn.addEventListener("click", logout);
+    }
 
-    sidebarOverlay.addEventListener("click", () => {
-        sidebar.classList.remove("open");
-        sidebarOverlay.classList.remove("show");
-    });
+    if (mobileMenuBtn && sidebar && sidebarOverlay) {
+        mobileMenuBtn.addEventListener("click", () => {
+            sidebar.classList.add("open");
+            sidebarOverlay.classList.add("show");
+        });
 
-    navLinks.forEach((button) => {
-        button.addEventListener("click", () => {
-            const target = button.dataset.target;
-            showSection(target);
+        sidebarOverlay.addEventListener("click", () => {
             sidebar.classList.remove("open");
             sidebarOverlay.classList.remove("show");
+        });
+    }
+}
+
+function initNavigation() {
+    const navLinks = document.querySelectorAll(".nav-link");
+    const sections = document.querySelectorAll(".page-section");
+    const pageTitle = document.getElementById("pageTitle");
+    const pageSubtitle = document.getElementById("pageSubtitle");
+
+    navLinks.forEach(link => {
+        link.addEventListener("click", () => {
+            const target = link.dataset.target;
+
+            navLinks.forEach(item => item.classList.remove("active"));
+            link.classList.add("active");
+
+            sections.forEach(section => {
+                section.classList.toggle("active", section.id === target);
+            });
+
+            if (pageInfo[target]) {
+                pageTitle.textContent = pageInfo[target].title;
+                pageSubtitle.textContent = pageInfo[target].subtitle;
+            }
+
+            if (sidebar && sidebarOverlay) {
+                sidebar.classList.remove("open");
+                sidebarOverlay.classList.remove("show");
+            }
         });
     });
 }
 
-function showSection(sectionId) {
-    document.querySelectorAll(".page-section").forEach(s => s.classList.remove("active"));
-    document.querySelectorAll(".nav-link").forEach(b => b.classList.remove("active"));
-
-    document.getElementById(sectionId).classList.add("active");
-    document.querySelector(`[data-target="${sectionId}"]`).classList.add("active");
-
-    // Update topbar title
-    const meta = PAGE_META[sectionId];
-    if (meta) {
-        document.getElementById("pageTitle").textContent = meta.title;
-        document.getElementById("pageSubtitle").textContent = meta.subtitle;
-    }
-}
-
-function initData() {
-    const storedProducts = localStorage.getItem(PRODUCTS_KEY);
-    const storedHistory = localStorage.getItem(HISTORY_KEY);
-
-    if (!storedProducts) {
-        products = [
-            {
-                id: createId(),
-                codigo: "PRD-001",
-                nombre: "Laptop de alto rendimiento",
-                categoria: "Tecnología",
-                marca: "HP",
-                modelo: "Pavilion 15",
-                serie: "SN-LAP-001",
-                precio: 2800,
-                ubicacion: "Almacén principal",
-                estado: "Disponible",
-                observacion: "Producto apto para entrega.",
-                fechaRegistro: new Date().toISOString(),
-                ultimaActualizacion: new Date().toISOString()
-            },
-            {
-                id: createId(),
-                codigo: "PRD-002",
-                nombre: "Smart TV 55 pulgadas",
-                categoria: "Electrodomésticos",
-                marca: "Samsung",
-                modelo: "Crystal UHD",
-                serie: "SN-TV-002",
-                precio: 3200,
-                ubicacion: "Zona de exhibición",
-                estado: "Exhibición",
-                observacion: "Producto asignado a sala de exhibición.",
-                fechaRegistro: new Date().toISOString(),
-                ultimaActualizacion: new Date().toISOString()
-            },
-            {
-                id: createId(),
-                codigo: "PRD-003",
-                nombre: "Consola de videojuegos",
-                categoria: "Tecnología",
-                marca: "Sony",
-                modelo: "PlayStation 5",
-                serie: "SN-PS5-003",
-                precio: 3500,
-                ubicacion: "Servicio técnico",
-                estado: "Servicio Técnico",
-                observacion: "Pendiente de revisión técnica.",
-                fechaRegistro: new Date().toISOString(),
-                ultimaActualizacion: new Date().toISOString()
-            }
-        ];
-
-        history = products.map((product) => ({
-            id: createId(),
-            productId: product.id,
-            codigo: product.codigo,
-            producto: product.nombre,
-            estadoAnterior: "Registro inicial",
-            estadoNuevo: product.estado,
-            usuario: currentUser.name,
-            comentario: product.observacion || "Producto registrado en el sistema.",
-            fecha: product.fechaRegistro
-        }));
-
-        saveData();
-    } else {
-        products = safeParse(storedProducts, []);
-        history = safeParse(storedHistory, []);
-    }
-}
-
 function initForm() {
-    const productForm = document.getElementById("productForm");
+    const form = document.getElementById("productForm");
 
-    productForm.addEventListener("submit", (event) => {
+    if (!form) return;
+
+    if (!canRegisterProducts()) {
+        form.querySelectorAll("input, select, textarea, button").forEach(element => {
+            element.disabled = true;
+        });
+
+        return;
+    }
+
+    form.addEventListener("submit", async (event) => {
         event.preventDefault();
 
         const codigo = getValue("codigo").toUpperCase();
-        const codeExists = products.some(p => p.codigo.toUpperCase() === codigo);
+        const serie = getValue("serie").toUpperCase();
 
-        if (codeExists) {
-            showToast("Ya existe un producto con ese código.", "error");
+        const skuRegex = /^SKU-[A-Z]{3}-\d{3}$/;
+        const serieRegex = /^SER-[A-Z]{3}-[A-Z0-9]+-\d{4}$/;
+
+        if (!codigo || !serie || !getValue("nombre") || !getValue("categoria") || !getValue("marca") || !getValue("proveedor") || !getValue("ubicacion")) {
+            showToast("Complete todos los campos obligatorios.", "error");
             return;
         }
 
-        const now = new Date().toISOString();
+        if (!skuRegex.test(codigo)) {
+            showToast("El SKU debe tener el formato SKU-LAP-001.", "error");
+            return;
+        }
+
+        if (!serieRegex.test(serie)) {
+            showToast("La serie debe tener el formato SER-LAP-HP15-2026.", "error");
+            return;
+        }
+
+        if (getValue("marca").length < 2 || getValue("marca").length > 80) {
+            showToast("La marca debe tener entre 2 y 80 caracteres.", "error");
+            return;
+        }
+
+        if (getValue("modelo") && (getValue("modelo").length < 2 || getValue("modelo").length > 100)) {
+            showToast("El modelo debe tener entre 2 y 100 caracteres.", "error");
+            return;
+        }
+
+        if (getValue("ubicacion").length < 3 || getValue("ubicacion").length > 120) {
+            showToast("La ubicación debe tener entre 3 y 120 caracteres.", "error");
+            return;
+        }
+
+        if (getValue("observacion").length > 500) {
+            showToast("La observación no debe superar 500 caracteres.", "error");
+            return;
+        }
+
         const product = {
-            id: createId(),
             codigo,
+            serie,
             nombre: getValue("nombre"),
             categoria: getValue("categoria"),
             marca: getValue("marca"),
             modelo: getValue("modelo"),
-            serie: getValue("serie"),
+            proveedor: getValue("proveedor"),
+            estado: getValue("estado"),
             precio: Number(getValue("precio")) || 0,
             ubicacion: getValue("ubicacion"),
-            estado: getValue("estado"),
-            observacion: getValue("observacion"),
-            fechaRegistro: now,
-            ultimaActualizacion: now
+            observacion: getValue("observacion")
         };
 
-        products.unshift(product);
-        history.unshift({
-            id: createId(),
-            productId: product.id,
-            codigo: product.codigo,
-            producto: product.nombre,
-            estadoAnterior: "Registro inicial",
-            estadoNuevo: product.estado,
-            usuario: currentUser.name,
-            comentario: product.observacion || "Producto registrado en el sistema.",
-            fecha: now
-        });
+        try {
+            const response = await fetch(`${APP_API_URL}/productos`, {
+                method: "POST",
+                headers: getAuthHeaders(),
+                body: JSON.stringify(product)
+            });
 
-        saveData();
-        productForm.reset();
-        renderAll();
-        showToast("Producto registrado correctamente.");
-        showSection("productos");
+            if (await handleUnauthorized(response)) return;
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                showToast(data.message || "No se pudo registrar el producto.", "error");
+                return;
+            }
+
+            form.reset();
+
+            await loadData();
+
+            showToast("Producto registrado correctamente.", "success");
+            goToSection("productos");
+
+        } catch (error) {
+            console.error(error);
+            showToast("Error al conectar con el servidor.", "error");
+        }
     });
 }
 
@@ -212,279 +389,512 @@ function initFilters() {
     const statusFilter = document.getElementById("statusFilter");
     const clearFilters = document.getElementById("clearFilters");
 
-    searchInput.addEventListener("input", renderProducts);
-    statusFilter.addEventListener("change", renderProducts);
+    if (searchInput) {
+        searchInput.addEventListener("input", renderProducts);
+    }
 
-    clearFilters.addEventListener("click", () => {
-        searchInput.value = "";
-        statusFilter.value = "";
-        renderProducts();
-    });
+    if (statusFilter) {
+        statusFilter.addEventListener("change", renderProducts);
+    }
+
+    if (clearFilters) {
+        clearFilters.addEventListener("click", () => {
+            searchInput.value = "";
+            statusFilter.value = "";
+            renderProducts();
+        });
+    }
 }
 
 function initModal() {
-    const statusModal = document.getElementById("statusModal");
-
-    document.getElementById("closeModal").addEventListener("click", closeStatusModal);
-    document.getElementById("cancelStatusChange").addEventListener("click", closeStatusModal);
-    document.getElementById("saveStatusChange").addEventListener("click", saveStatusChangeHandler);
-
-    statusModal.addEventListener("click", (e) => {
-        if (e.target === statusModal) closeStatusModal();
-    });
-}
-
-function openStatusModal(productId) {
-    const product = products.find(p => p.id === productId);
-    if (!product) { showToast("Producto no encontrado.", "error"); return; }
-
-    selectedProductId = productId;
-    document.getElementById("modalProductName").textContent = `${product.codigo} — ${product.nombre}`;
-    document.getElementById("modalCurrentStatus").value = product.estado;
-    document.getElementById("newStatus").value = product.estado;
-    document.getElementById("changeComment").value = "";
-
+    const closeModal = document.getElementById("closeModal");
+    const cancelStatusChange = document.getElementById("cancelStatusChange");
+    const saveStatusChange = document.getElementById("saveStatusChange");
     const modal = document.getElementById("statusModal");
-    modal.classList.add("show");
-    modal.setAttribute("aria-hidden", "false");
-}
 
-function closeStatusModal() {
-    selectedProductId = null;
-    const modal = document.getElementById("statusModal");
-    modal.classList.remove("show");
-    modal.setAttribute("aria-hidden", "true");
-}
+    if (closeModal) closeModal.addEventListener("click", closeStatusModal);
+    if (cancelStatusChange) cancelStatusChange.addEventListener("click", closeStatusModal);
 
-function saveStatusChangeHandler() {
-    const product = products.find(p => p.id === selectedProductId);
-    if (!product) { showToast("Producto no encontrado.", "error"); return; }
-
-    const newStatus = document.getElementById("newStatus").value;
-    const comment = document.getElementById("changeComment").value.trim();
-
-    if (newStatus === product.estado) {
-        showToast("El estado seleccionado es igual al actual.");
-        return;
+    if (modal) {
+        modal.addEventListener("click", (event) => {
+            if (event.target === modal) closeStatusModal();
+        });
     }
 
-    const previousStatus = product.estado;
-    const now = new Date().toISOString();
-
-    product.estado = newStatus;
-    product.ultimaActualizacion = now;
-
-    history.unshift({
-        id: createId(),
-        productId: product.id,
-        codigo: product.codigo,
-        producto: product.nombre,
-        estadoAnterior: previousStatus,
-        estadoNuevo: newStatus,
-        usuario: currentUser.name,
-        comentario: comment || "Cambio de estado sin comentario adicional.",
-        fecha: now
-    });
-
-    saveData();
-    closeStatusModal();
-    renderAll();
-    showToast("Estado actualizado correctamente.");
+    if (saveStatusChange) {
+        saveStatusChange.addEventListener("click", saveStatusChangeHandler);
+    }
 }
 
 function renderAll() {
-    renderKpis();
+    renderKPIs();
     renderProducts();
     renderHistory();
     renderReports();
 }
 
-function renderKpis() {
+function renderKPIs() {
     const total = products.length;
     const disponibles = products.filter(p => p.estado === "Disponible").length;
     const noDisponibles = total - disponibles;
 
-    animateNumber("kpiTotal", total);
-    animateNumber("kpiDisponible", disponibles);
-    animateNumber("kpiNoDisponibles", noDisponibles);
-    animateNumber("kpiHistorial", history.length);
-}
-
-function animateNumber(id, target) {
-    const el = document.getElementById(id);
-    const start = parseInt(el.textContent) || 0;
-    const duration = 500;
-    const startTime = performance.now();
-
-    function update(now) {
-        const elapsed = now - startTime;
-        const progress = Math.min(elapsed / duration, 1);
-        const eased = 1 - Math.pow(1 - progress, 3);
-        el.textContent = Math.round(start + (target - start) * eased);
-        if (progress < 1) requestAnimationFrame(update);
-    }
-    requestAnimationFrame(update);
+    setText("kpiTotal", total);
+    setText("kpiDisponible", disponibles);
+    setText("kpiNoDisponibles", noDisponibles);
+    setText("kpiHistorial", history.length);
 }
 
 function renderProducts() {
     const tbody = document.getElementById("productsTableBody");
-    const emptyMessage = document.getElementById("emptyProducts");
-    const searchValue = document.getElementById("searchInput").value.trim().toLowerCase();
-    const statusValue = document.getElementById("statusFilter").value;
+    const empty = document.getElementById("emptyProducts");
+    const searchInput = document.getElementById("searchInput");
+    const statusFilter = document.getElementById("statusFilter");
 
-    const filtered = products.filter(p => {
-        const text = [p.codigo, p.nombre, p.categoria, p.marca, p.modelo, p.serie, p.ubicacion, p.estado]
-            .join(" ").toLowerCase();
-        return text.includes(searchValue) && (statusValue ? p.estado === statusValue : true);
+    if (!tbody) return;
+
+    const query = searchInput ? searchInput.value.toLowerCase().trim() : "";
+    const status = statusFilter ? statusFilter.value : "";
+
+    const filtered = products.filter(product => {
+        const text = [
+            product.codigo,
+            product.nombre,
+            product.categoria,
+            product.marca,
+            product.modelo,
+            product.serie,
+            product.proveedor,
+            product.ubicacion,
+            product.estado
+        ].join(" ").toLowerCase();
+
+        const matchSearch = !query || text.includes(query);
+        const matchStatus = !status || product.estado === status;
+
+        return matchSearch && matchStatus;
     });
 
     tbody.innerHTML = "";
 
-    if (filtered.length === 0) {
-        emptyMessage.style.display = "flex";
-        return;
+    if (empty) {
+        empty.style.display = filtered.length === 0 ? "block" : "none";
     }
-    emptyMessage.style.display = "none";
 
-    filtered.forEach((product) => {
+    filtered.forEach(product => {
         const tr = document.createElement("tr");
+
         tr.innerHTML = `
             <td><strong>${escapeHtml(product.codigo)}</strong></td>
             <td>
-                <span class="product-title">${escapeHtml(product.nombre)}</span>
-                <span class="product-subtitle">
-                    ${escapeHtml(product.modelo || "Sin modelo")} &middot; ${escapeHtml(product.serie || "Sin serie")}
+                <div class="product-cell">
+                    <strong>${escapeHtml(product.nombre)}</strong>
+                    <span>${escapeHtml(product.marca)} ${escapeHtml(product.modelo || "")}</span>
+                </div>
+            </td>
+            <td>${escapeHtml(product.serie || "Sin serie")}</td>
+            <td>${escapeHtml(product.proveedor || "Sin proveedor")}</td>
+            <td>${escapeHtml(product.ubicacion)}</td>
+            <td>
+                <span class="status-badge ${statusClass(product.estado)}">
+                    ${escapeHtml(product.estado)}
                 </span>
             </td>
-            <td>${escapeHtml(product.categoria)}</td>
-            <td>${escapeHtml(product.marca)}</td>
-            <td>${escapeHtml(product.ubicacion)}</td>
-            <td><span class="badge ${getStatusClass(product.estado)}">${escapeHtml(product.estado)}</span></td>
-            <td>${formatDate(product.ultimaActualizacion)}</td>
+            <td>${formatDate(product.fechaRegistro)}</td>
             <td>
-                <button class="btn btn-ghost" data-open-status="${product.id}" style="font-size:0.8rem;padding:7px 12px">
+                <button class="btn btn-small btn-primary" onclick="openStatusModal(${product.id})">
                     Cambiar estado
                 </button>
             </td>
         `;
-        tbody.appendChild(tr);
-    });
 
-    document.querySelectorAll("[data-open-status]").forEach(btn => {
-        btn.addEventListener("click", () => openStatusModal(btn.dataset.openStatus));
+        tbody.appendChild(tr);
     });
 }
 
 function renderHistory() {
     const tbody = document.getElementById("historyTableBody");
-    const emptyMessage = document.getElementById("emptyHistory");
+    const empty = document.getElementById("emptyHistory");
+
+    if (!tbody) return;
 
     tbody.innerHTML = "";
 
-    if (history.length === 0) {
-        emptyMessage.style.display = "flex";
-        return;
+    if (empty) {
+        empty.style.display = history.length === 0 ? "block" : "none";
     }
-    emptyMessage.style.display = "none";
 
     history.forEach(item => {
         const tr = document.createElement("tr");
+
         tr.innerHTML = `
             <td>${formatDate(item.fecha)}</td>
             <td><strong>${escapeHtml(item.codigo)}</strong></td>
             <td>${escapeHtml(item.producto)}</td>
-            <td><span class="badge ${getStatusClass(item.estadoAnterior)}">${escapeHtml(item.estadoAnterior)}</span></td>
-            <td><span class="badge ${getStatusClass(item.estadoNuevo)}">${escapeHtml(item.estadoNuevo)}</span></td>
+            <td>
+                <span class="status-badge ${statusClass(item.estadoAnterior)}">
+                    ${escapeHtml(item.estadoAnterior)}
+                </span>
+            </td>
+            <td>
+                <span class="status-badge ${statusClass(item.estadoNuevo)}">
+                    ${escapeHtml(item.estadoNuevo)}
+                </span>
+            </td>
             <td>${escapeHtml(item.usuario)}</td>
-            <td>${escapeHtml(item.comentario)}</td>
+            <td>${escapeHtml(item.comentario || "Sin comentario")}</td>
         `;
+
         tbody.appendChild(tr);
     });
 }
 
 function renderReports() {
+    renderReportByState();
+    renderReportByCategory();
+    renderAcademicIndicators();
+    renderImprovementIndicators();
+    renderInventoryMovements();
+}
+
+function renderReportByState() {
     const reportCards = document.getElementById("reportCards");
     const reportTableBody = document.getElementById("reportTableBody");
-    const total = products.length;
+
+    if (!reportCards || !reportTableBody) return;
+
+    const total = reportByState.reduce((sum, item) => sum + Number(item.cantidad || 0), 0);
 
     reportCards.innerHTML = "";
     reportTableBody.innerHTML = "";
 
-    STATES.forEach((state, i) => {
-        const items = products.filter(p => p.estado === state);
-        const count = items.length;
-        const percentage = total > 0 ? Math.round((count / total) * 100) : 0;
-        const totalValue = items.reduce((sum, p) => sum + Number(p.precio || 0), 0);
+    reportByState.forEach(item => {
+        const cantidad = Number(item.cantidad || 0);
+        const valor = Number(item.valor_total || 0);
+        const porcentaje = total > 0 ? ((cantidad / total) * 100).toFixed(1) : "0.0";
 
         const card = document.createElement("article");
-        card.className = "report-card content-card";
-        card.style.animationDelay = `${i * 0.06}s`;
+        card.className = "content-card report-card";
+
         card.innerHTML = `
-            <h3>${escapeHtml(state)}</h3>
-            <strong>${count}</strong>
-            <div class="progress"><span style="width:${percentage}%"></span></div>
-            <p>${percentage}% del inventario</p>
+            <span class="status-badge ${statusClass(item.estado)}">
+                ${escapeHtml(item.estado)}
+            </span>
+            <strong>${cantidad}</strong>
+            <p>${porcentaje}% del inventario</p>
         `;
+
         reportCards.appendChild(card);
 
         const tr = document.createElement("tr");
+
         tr.innerHTML = `
-            <td><span class="badge ${getStatusClass(state)}">${escapeHtml(state)}</span></td>
-            <td><strong>${count}</strong></td>
-            <td>${formatMoney(totalValue)}</td>
-            <td>${percentage}%</td>
+            <td>
+                <span class="status-badge ${statusClass(item.estado)}">
+                    ${escapeHtml(item.estado)}
+                </span>
+            </td>
+            <td>${cantidad}</td>
+            <td>S/ ${valor.toFixed(2)}</td>
+            <td>${porcentaje}%</td>
         `;
+
         reportTableBody.appendChild(tr);
     });
 }
 
-function saveData() {
-    localStorage.setItem(PRODUCTS_KEY, JSON.stringify(products));
-    localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
+function renderReportByCategory() {
+    const tbody = document.getElementById("categoryReportTableBody");
+
+    if (!tbody) return;
+
+    tbody.innerHTML = "";
+
+    reportByCategory.forEach(item => {
+        const tr = document.createElement("tr");
+
+        tr.innerHTML = `
+            <td><strong>${escapeHtml(item.categoria)}</strong></td>
+            <td>${Number(item.cantidad || 0)}</td>
+            <td>S/ ${Number(item.valor_total || 0).toFixed(2)}</td>
+        `;
+
+        tbody.appendChild(tr);
+    });
+}
+
+function renderAcademicIndicators() {
+    const tbody = document.getElementById("indicatorsTableBody");
+
+    if (!tbody) return;
+
+    tbody.innerHTML = "";
+
+    academicIndicators.forEach(item => {
+        const tr = document.createElement("tr");
+
+        tr.innerHTML = `
+            <td><strong>${escapeHtml(item.tipo_medicion)}</strong></td>
+            <td>${escapeHtml(item.periodo)}</td>
+            <td>${Number(item.errores_registro || 0)}</td>
+            <td>${Number(item.incidencias_mensuales || 0)}</td>
+            <td>${Number(item.porcentaje_precision || 0).toFixed(2)}%</td>
+            <td>${Number(item.tiempo_validacion_promedio || 0).toFixed(2)} min</td>
+            <td>${Number(item.tiempo_registro_promedio || 0).toFixed(2)} min</td>
+        `;
+
+        tbody.appendChild(tr);
+    });
+}
+
+function renderImprovementIndicators() {
+    const container = document.getElementById("improvementCards");
+
+    if (!container) return;
+
+    container.innerHTML = "";
+
+    if (!improvementIndicators) {
+        container.innerHTML = `
+            <div class="empty-state">
+                No existen indicadores de mejora registrados.
+            </div>
+        `;
+        return;
+    }
+
+    const cards = [
+        {
+            titulo: "Reducción de errores",
+            valor: `${Number(improvementIndicators.mejora_errores_porcentaje || 0).toFixed(2)}%`,
+            detalle: `${improvementIndicators.errores_preprueba} errores antes → ${improvementIndicators.errores_posprueba} después`
+        },
+        {
+            titulo: "Reducción de incidencias",
+            valor: `${Number(improvementIndicators.mejora_incidencias_porcentaje || 0).toFixed(2)}%`,
+            detalle: `${improvementIndicators.incidencias_preprueba} incidencias antes → ${improvementIndicators.incidencias_posprueba} después`
+        },
+        {
+            titulo: "Mejora en validación",
+            valor: `${Number(improvementIndicators.mejora_tiempo_validacion_porcentaje || 0).toFixed(2)}%`,
+            detalle: `${improvementIndicators.tiempo_validacion_preprueba} min antes → ${improvementIndicators.tiempo_validacion_posprueba} min después`
+        },
+        {
+            titulo: "Mejora de precisión",
+            valor: `+${Number(improvementIndicators.mejora_precision_puntos || 0).toFixed(2)} pts`,
+            detalle: `${improvementIndicators.precision_preprueba}% antes → ${improvementIndicators.precision_posprueba}% después`
+        }
+    ];
+
+    cards.forEach(item => {
+        const card = document.createElement("article");
+        card.className = "content-card report-card";
+
+        card.innerHTML = `
+            <span class="status-badge status-disponible">${escapeHtml(item.titulo)}</span>
+            <strong>${escapeHtml(item.valor)}</strong>
+            <p>${escapeHtml(item.detalle)}</p>
+        `;
+
+        container.appendChild(card);
+    });
+}
+
+function renderInventoryMovements() {
+    const tbody = document.getElementById("movementsTableBody");
+
+    if (!tbody) return;
+
+    tbody.innerHTML = "";
+
+    inventoryMovements.forEach(item => {
+        const tr = document.createElement("tr");
+
+        tr.innerHTML = `
+            <td>${formatDate(item.fecha_movimiento)}</td>
+            <td><strong>${escapeHtml(item.sku)}</strong></td>
+            <td>${escapeHtml(item.producto)}</td>
+            <td>${escapeHtml(item.motivo)}</td>
+            <td>${escapeHtml(item.tipo_movimiento)}</td>
+            <td>
+                <span class="status-badge ${statusClass(item.estado_producto)}">
+                    ${escapeHtml(item.estado_producto)}
+                </span>
+            </td>
+            <td>${escapeHtml(item.usuario_responsable)}</td>
+            <td>${escapeHtml(item.documento_referencia || "Sin documento")}</td>
+        `;
+
+        tbody.appendChild(tr);
+    });
+}
+
+function openStatusModal(productId) {
+    selectedProductId = productId;
+
+    const product = products.find(p => Number(p.id) === Number(productId));
+
+    if (!product) {
+        showToast("Producto no encontrado.", "error");
+        return;
+    }
+
+    setText("modalProductName", `${product.codigo} · ${product.nombre}`);
+
+    const modalCurrentStatus = document.getElementById("modalCurrentStatus");
+    const newStatus = document.getElementById("newStatus");
+    const changeComment = document.getElementById("changeComment");
+    const modal = document.getElementById("statusModal");
+
+    if (modalCurrentStatus) modalCurrentStatus.value = product.estado;
+    if (newStatus) newStatus.value = product.estado;
+    if (changeComment) changeComment.value = "";
+
+    if (modal) {
+        modal.classList.add("show");
+        modal.setAttribute("aria-hidden", "false");
+    }
+}
+
+function closeStatusModal() {
+    selectedProductId = null;
+
+    const modal = document.getElementById("statusModal");
+
+    if (modal) {
+        modal.classList.remove("show");
+        modal.setAttribute("aria-hidden", "true");
+    }
+}
+
+async function saveStatusChangeHandler() {
+    if (!selectedProductId) return;
+
+    const product = products.find(p => Number(p.id) === Number(selectedProductId));
+
+    if (!product) {
+        showToast("Producto no encontrado.", "error");
+        return;
+    }
+
+    const newStatus = getValue("newStatus");
+    const comment = getValue("changeComment");
+
+    if (newStatus === product.estado) {
+        showToast("Seleccione un estado diferente al actual.", "error");
+        return;
+    }
+
+    if (comment.length > 500) {
+        showToast("El comentario no debe superar 500 caracteres.", "error");
+        return;
+    }
+
+    try {
+        const response = await fetch(`${APP_API_URL}/productos/${selectedProductId}/estado`, {
+            method: "PUT",
+            headers: getAuthHeaders(),
+            body: JSON.stringify({
+                nuevo_estado: newStatus,
+                comentario: comment
+            })
+        });
+
+        if (await handleUnauthorized(response)) return;
+
+        const data = await response.json();
+
+        if (!response.ok) {
+            showToast(data.message || "No se pudo actualizar el estado.", "error");
+            return;
+        }
+
+        closeStatusModal();
+
+        await loadData();
+
+        showToast("Estado actualizado correctamente.", "success");
+
+    } catch (error) {
+        console.error(error);
+        showToast("Error al conectar con el servidor.", "error");
+    }
+}
+
+function goToSection(sectionId) {
+    const link = document.querySelector(`.nav-link[data-target="${sectionId}"]`);
+
+    if (link) {
+        link.click();
+    }
 }
 
 function getValue(id) {
-    return document.getElementById(id).value.trim();
+    const element = document.getElementById(id);
+    return element ? element.value.trim() : "";
 }
 
-function createId() {
-    return window.crypto?.randomUUID?.() || `id-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+function setText(id, value) {
+    const element = document.getElementById(id);
+
+    if (element) {
+        element.textContent = value;
+    }
 }
 
-function safeParse(value, fallback) {
-    try { return JSON.parse(value); } catch { return fallback; }
-}
-
-function formatDate(isoDate) {
-    if (!isoDate) return "Sin fecha";
-    return new Intl.DateTimeFormat("es-PE", {
-        year: "numeric", month: "2-digit", day: "2-digit",
-        hour: "2-digit", minute: "2-digit"
-    }).format(new Date(isoDate));
-}
-
-function formatMoney(value) {
-    return new Intl.NumberFormat("es-PE", { style: "currency", currency: "PEN" }).format(Number(value || 0));
-}
-
-function getStatusClass(status) {
-    return "estado-" + String(status).toLowerCase()
-        .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+function statusClass(status) {
+    const normalized = String(status || "")
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
         .replace(/\s+/g, "-");
+
+    return `status-${normalized}`;
+}
+
+function formatDate(dateValue) {
+    if (!dateValue) return "Sin fecha";
+
+    const raw = String(dateValue);
+
+    const match = raw.match(/^(\d{4})-(\d{2})-(\d{2})[T\s](\d{2}):(\d{2})/);
+
+    if (!match) return "Sin fecha";
+
+    const [, year, month, day, hour, minute] = match;
+
+    let hourNumber = Number(hour);
+    const ampm = hourNumber >= 12 ? "p. m." : "a. m.";
+
+    hourNumber = hourNumber % 12;
+    if (hourNumber === 0) hourNumber = 12;
+
+    return `${day}/${month}/${year}, ${String(hourNumber).padStart(2, "0")}:${minute} ${ampm}`;
 }
 
 function escapeHtml(value) {
     return String(value ?? "")
-        .replaceAll("&", "&amp;").replaceAll("<", "&lt;")
-        .replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#039;");
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
 }
 
-function showToast(message) {
+function showToast(message, type = "success") {
     const toast = document.getElementById("toast");
-    const text = document.getElementById("toastText");
-    text.textContent = message;
-    toast.classList.remove("show");
-    void toast.offsetWidth;
-    toast.classList.add("show");
-    setTimeout(() => toast.classList.remove("show"), 3200);
+    const toastText = document.getElementById("toastText");
+
+    if (!toast || !toastText) {
+        alert(message);
+        return;
+    }
+
+    toastText.textContent = message;
+
+    toast.classList.remove("success", "error", "show");
+    toast.classList.add(type, "show");
+
+    setTimeout(() => {
+        toast.classList.remove("show");
+    }, 3000);
 }

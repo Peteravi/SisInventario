@@ -4,21 +4,15 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Inventario de Alto Valor | Acceso</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link
-        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&display=swap"
-        rel="stylesheet">
+    <title>OECHSLE Sede Puruchuco | Acceso</title>
+
     <link rel="stylesheet" href="css/styles.css" />
 </head>
 
 <body class="login-page">
 
-    <!-- Fondo animado canvas -->
     <canvas id="bgCanvas" class="bg-canvas"></canvas>
 
-    <!-- Partículas flotantes decorativas -->
     <div class="particles-wrapper" aria-hidden="true">
         <div class="particle p1"></div>
         <div class="particle p2"></div>
@@ -30,95 +24,90 @@
         <div class="particle p8"></div>
     </div>
 
-    <!-- Orbes de luz de fondo -->
     <div class="orb orb-1" aria-hidden="true"></div>
     <div class="orb orb-2" aria-hidden="true"></div>
     <div class="orb orb-3" aria-hidden="true"></div>
 
-    <!-- Grid lines decorativas -->
     <div class="grid-overlay" aria-hidden="true"></div>
 
     <main class="login-main">
         <div class="login-container">
 
-            <!-- Panel izquierdo: branding -->
             <div class="login-brand-panel">
                 <div class="brand-logo-wrap">
                     <div class="brand-logo">
-                        <span>IAV</span>
+                        <span>O</span>
                     </div>
                     <div class="brand-pulse"></div>
                 </div>
-                <h1 class="brand-title">Inventario<br><em>Alto Valor</em></h1>
-                <p class="brand-desc">Plataforma de control y gestión de activos de alto valor empresarial.</p>
+
+                <h1 class="brand-title">OECHSLE<br><em>Sede Puruchuco</em></h1>
+
+                <p class="brand-desc">
+                    Solución web académica orientada a mejorar el control del inventario de productos de alto valor,
+                    permitiendo registrar, clasificar y consultar el estado real de cada artículo.
+                </p>
 
                 <div class="brand-stats">
                     <div class="stat-item">
-                        <strong>100%</strong>
-                        <span>Trazabilidad</span>
+                        <strong>Control</strong>
+                        <span>Clasificación detallada de productos</span>
                     </div>
+
                     <div class="stat-divider"></div>
+
                     <div class="stat-item">
-                        <strong>Real</strong>
-                        <span>Estado en tiempo real</span>
+                        <strong>Gestión</strong>
+                        <span>Actualización del estado del inventario</span>
                     </div>
+
                     <div class="stat-divider"></div>
+
                     <div class="stat-item">
-                        <strong>Seguro</strong>
-                        <span>Acceso controlado</span>
+                        <strong>Reportes</strong>
+                        <span>Información para toma de decisiones</span>
                     </div>
                 </div>
 
                 <div class="brand-badge">
                     <div class="badge-dot"></div>
-                    Sistema operativo
+                    PROTOTIPO ACADÉMICO DE INVENTARIO
                 </div>
             </div>
 
-            <!-- Panel derecho: formulario -->
             <div class="login-form-panel">
                 <div class="form-panel-inner">
 
                     <div class="form-header">
-                        <p class="form-eyebrow">Bienvenido de vuelta</p>
+                        <p class="form-eyebrow">Inventario de alto valor</p>
                         <h2 class="form-title">Iniciar sesión</h2>
-                        <p class="form-subtitle">Ingrese sus credenciales para acceder al panel de control.</p>
+                        <p class="form-subtitle">
+                            Accede al sistema para registrar productos, validar disponibilidad,
+                            actualizar estados y consultar reportes del inventario.
+                        </p>
                     </div>
 
                     <form id="loginForm" novalidate>
 
                         <div class="field-group">
                             <label for="email" class="field-label">Correo electrónico</label>
+
                             <div class="field-wrap">
-                                <svg class="field-icon" viewBox="0 0 20 20" fill="none">
-                                    <path
-                                        d="M2.5 6.5L10 11.5L17.5 6.5M3 5h14a1 1 0 011 1v8a1 1 0 01-1 1H3a1 1 0 01-1-1V6a1 1 0 011-1z"
-                                        stroke="currentColor" stroke-width="1.5" stroke-linecap="round"
-                                        stroke-linejoin="round" />
-                                </svg>
                                 <input type="email" id="email" name="email" class="field-input"
-                                    placeholder="admin@inventario.com" autocomplete="email" required />
+                                    placeholder="jefe@oechsle.com" autocomplete="email" required />
                             </div>
                         </div>
 
                         <div class="field-group">
                             <label for="password" class="field-label">Contraseña</label>
+
                             <div class="field-wrap">
-                                <svg class="field-icon" viewBox="0 0 20 20" fill="none">
-                                    <rect x="4" y="9" width="12" height="9" rx="1.5" stroke="currentColor"
-                                        stroke-width="1.5" />
-                                    <path d="M7 9V6.5a3 3 0 116 0V9" stroke="currentColor" stroke-width="1.5"
-                                        stroke-linecap="round" />
-                                </svg>
                                 <input type="password" id="password" name="password" class="field-input"
-                                    placeholder="••••••••" autocomplete="current-password" required />
+                                    placeholder="123456" autocomplete="current-password" required />
+
                                 <button type="button" class="field-toggle" id="togglePassword"
                                     aria-label="Mostrar contraseña">
-                                    <svg viewBox="0 0 20 20" fill="none">
-                                        <path d="M2 10s3-6 8-6 8 6 8 6-3 6-8 6-8-6-8-6z" stroke="currentColor"
-                                            stroke-width="1.5" />
-                                        <circle cx="10" cy="10" r="2.5" stroke="currentColor" stroke-width="1.5" />
-                                    </svg>
+                                    👁
                                 </button>
                             </div>
                         </div>
@@ -127,20 +116,19 @@
 
                         <button type="submit" class="btn-login">
                             <span>Ingresar al sistema</span>
-                            <svg viewBox="0 0 20 20" fill="none">
-                                <path d="M4 10h12M11 5l5 5-5 5" stroke="currentColor" stroke-width="1.8"
-                                    stroke-linecap="round" stroke-linejoin="round" />
-                            </svg>
                         </button>
 
                     </form>
 
                     <div class="demo-hint">
-                        <svg viewBox="0 0 16 16" fill="none">
-                            <circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.4" />
-                            <path d="M8 7v5M8 5v.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
-                        </svg>
-                        <span>Demo: <code>admin@inventario.com</code> / <code>admin123</code></span>
+                        <span>
+                            Usuarios:
+                            <code>jefe@oechsle.com</code>,
+                            <code>operador@oechsle.com</code>,
+                            <code>admin.tienda@oechsle.com</code>,
+                            <code>postventa@oechsle.com</code>
+                            / clave <code>123456</code>
+                        </span>
                     </div>
 
                 </div>
@@ -150,21 +138,36 @@
     </main>
 
     <script src="js/auth.js"></script>
-    <script>
-        // Toggle password visibility
-        document.getElementById('togglePassword').addEventListener('click', function () {
-            const input = document.getElementById('password');
-            const isText = input.type === 'text';
-            input.type = isText ? 'password' : 'text';
-            this.classList.toggle('active', !isText);
-        });
 
-        // Canvas animated background
+    <script>
+        const togglePassword = document.getElementById("togglePassword");
+
+        if (togglePassword) {
+            togglePassword.addEventListener("click", function () {
+                const input = document.getElementById("password");
+                const isText = input.type === "text";
+
+                input.type = isText ? "password" : "text";
+                this.textContent = isText ? "👁" : "🙈";
+            });
+        }
+
         (() => {
-            const canvas = document.getElementById('bgCanvas');
-            const ctx = canvas.getContext('2d');
-            let W, H, dots = [], lines = [];
-            const COLORS = ['rgba(227,6,19,', 'rgba(255,204,0,', 'rgba(255,255,255,'];
+            const canvas = document.getElementById("bgCanvas");
+
+            if (!canvas) return;
+
+            const ctx = canvas.getContext("2d");
+
+            let W;
+            let H;
+            let dots = [];
+
+            const COLORS = [
+                "rgba(227,6,19,",
+                "rgba(255,204,0,",
+                "rgba(255,255,255,"
+            ];
 
             function resize() {
                 W = canvas.width = window.innerWidth;
@@ -173,6 +176,7 @@
 
             function createDots(n) {
                 dots = [];
+
                 for (let i = 0; i < n; i++) {
                     dots.push({
                         x: Math.random() * W,
@@ -189,12 +193,12 @@
             function draw() {
                 ctx.clearRect(0, 0, W, H);
 
-                // Draw lines between nearby dots
                 for (let i = 0; i < dots.length; i++) {
                     for (let j = i + 1; j < dots.length; j++) {
                         const dx = dots[i].x - dots[j].x;
                         const dy = dots[i].y - dots[j].y;
                         const dist = Math.sqrt(dx * dx + dy * dy);
+
                         if (dist < 120) {
                             ctx.beginPath();
                             ctx.strokeStyle = `rgba(227,6,19,${0.06 * (1 - dist / 120)})`;
@@ -206,28 +210,33 @@
                     }
                 }
 
-                // Draw dots
-                dots.forEach(d => {
-                    d.x += d.vx;
-                    d.y += d.vy;
-                    if (d.x < 0 || d.x > W) d.vx *= -1;
-                    if (d.y < 0 || d.y > H) d.vy *= -1;
+                dots.forEach(dot => {
+                    dot.x += dot.vx;
+                    dot.y += dot.vy;
+
+                    if (dot.x < 0 || dot.x > W) dot.vx *= -1;
+                    if (dot.y < 0 || dot.y > H) dot.vy *= -1;
 
                     ctx.beginPath();
-                    ctx.arc(d.x, d.y, d.r, 0, Math.PI * 2);
-                    ctx.fillStyle = d.color + d.alpha + ')';
+                    ctx.arc(dot.x, dot.y, dot.r, 0, Math.PI * 2);
+                    ctx.fillStyle = dot.color + dot.alpha + ")";
                     ctx.fill();
                 });
 
                 requestAnimationFrame(draw);
             }
 
-            window.addEventListener('resize', () => { resize(); createDots(55); });
+            window.addEventListener("resize", () => {
+                resize();
+                createDots(55);
+            });
+
             resize();
             createDots(55);
             draw();
         })();
     </script>
+
 </body>
 
 </html>
